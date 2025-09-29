@@ -1,0 +1,37 @@
+# FastAPI server
+fastapi
+uvicorn
+
+# LangChain & LangGraph
+langchain
+langchain-core
+langchain-openai
+langchain-qdrant
+langchain-community
+langgraph
+langgraph-checkpoint
+langgraph-prebuilt
+langgraph-sdk
+langsmith
+langmem
+
+# Embeddings & LLM
+openai
+groq
+
+# Qdrant client
+qdrant-client
+
+# Data processing
+pandas
+numpy
+python-dotenv
+requests
+tiktoken
+unstructured
+
+# DOCX loader
+python-docx
+
+# Optional: for pretty printing / Jupyter (if needed)
+IPython
