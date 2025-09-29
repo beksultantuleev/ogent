@@ -255,5 +255,3 @@ docker-compose logs -f qdrant
 ```
 
 ---
-
-**Built with ❤️ for O!Store Kyrgyzstan**
