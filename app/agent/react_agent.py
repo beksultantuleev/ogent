@@ -2,10 +2,8 @@
 O!Store ReAct Agent - Main agent implementation
 """
 import os
-
 os.environ["HTTP_PROXY"] = "http://172.27.129.0:3128"
 os.environ["HTTPS_PROXY"] = "http://172.27.129.0:3128"
-
 from ..utils.logging import AnalyticsLogger
 from ..core.vectorstore import VectorStoreManager
 from ..core.config import settings
@@ -20,30 +18,23 @@ from langchain_core.messages import SystemMessage, HumanMessage
 from typing import Dict, Any, List
 from datetime import datetime
 
-
-
 class AgentState(MessagesState):
     """Enhanced agent state for ReAct reasoning"""
     context: Dict[str, RunningSummary]
     session_logs: List[str]
     phone_mentions: List[str]
 
-
 class OStoreAgent:
     """O!Store ReAct Agent for mobile phone retail assistance"""
-
     def __init__(self):
         settings.validate()
-
         # Initialize components
         self.vector_manager = VectorStoreManager()
         self.logger = AnalyticsLogger()
-
         # Get retrievers and tools
         specs_retriever, docs_retriever = self.vector_manager.get_retrievers()
         self.tools = get_retriever_tools(specs_retriever, docs_retriever)
         self.tools_by_name = {tool.name: tool for tool in self.tools}
-
         # Initialize models
         self.model = ChatOpenAI(
             model=settings.openai_model,
@@ -51,6 +42,11 @@ class OStoreAgent:
             streaming=False
         )
         self.summarization_model = self.model.bind(max_tokens=128)
+        # Initialize conversation state storage per thread
+        self.state_per_thread = {}
+
+        # Keep memory object alive for state graph
+        self.memory = InMemorySaver()
 
         # Build workflow
         self._build_workflow()
@@ -65,19 +61,16 @@ class OStoreAgent:
             max_tokens_before_summary=256,
             max_summary_tokens=128,
         )
-
         # Build workflow
         workflow = StateGraph(AgentState)
         workflow.add_node("summarize", summarization_node)
         workflow.add_node("agent", self._call_model)
         workflow.add_node("tools", self._tool_node)
         workflow.add_node("analytics", self._analytics_node)
-
         workflow.set_entry_point("summarize")
         workflow.add_edge("summarize", "agent")
         workflow.add_edge("tools", "agent")
         workflow.add_edge("analytics", END)
-
         workflow.add_conditional_edges(
             "agent",
             self._should_continue,
@@ -86,20 +79,16 @@ class OStoreAgent:
                 "end": "analytics",
             }
         )
-
-        # Compile with memory
-        memory = InMemorySaver()
-        self.graph = workflow.compile(checkpointer=memory)
+        # Compile with persistent memory
+        self.graph = workflow.compile(checkpointer=self.memory)
 
     def _call_model(self, state: AgentState):
         """Enhanced ReAct agent with proper reasoning chain"""
         system_prompt = SystemMessage("""
 You are the virtual consultant for O!Store, helping customers select mobile phones and answering their questions about the store.
-
 TOOLS:  
 - specs_retriever: retrieves mobile phone specifications and prices  
 - docs_retriever: provides information about the store (locations, warranty, delivery, promotions)  
-
 KEY RULES:  
 - Communicate in the language the user chooses or asks in  
 - Clarify the customer’s needs (budget, preferred features)  
@@ -110,13 +99,11 @@ KEY RULES:
 - Explain why each phone is a good fit for the customer’s needs  
 - Provide 2–3 options for comparison  
 - End with questions or offers of additional assistance  
-
 RESPONSE STYLE:  
 - Begin with tailored recommendations based on the customer’s criteria  
 - For each phone, explain: “This is an excellent choice because...”  
 - Use this structure: “Recommend:”, “Specifications:”, “Why it fits:”  
 - Always conclude with: “Would you like to know more about any of these options?”  
-
 MARKDOWN FORMATTING:  
 - Bold phone models only (e.g., **iPhone 16 Pro**)  
 - Use • or - for listing features  
@@ -124,31 +111,27 @@ MARKDOWN FORMATTING:
 - Separate paragraphs with blank lines  
 - Use *italics* sparingly to highlight advantages  
 - Format prices as **$799** or **799 USD**  
-
 IMPORTANT:  
-Respond directly to the customer in Markdown format, WITHOUT revealing internal thoughts or notes such as "THOUGHT:" or "FINAL ANSWER:". Provide clear, natural, and friendly answers with neat, attractive formatting.       """)
-
+Respond directly to the customer in Markdown format, WITHOUT revealing internal thoughts or notes such as "THOUGHT:" or "FINAL ANSWER:". Provide clear, natural, and friendly answers with neat, attractive formatting.
+        """)
         # Track current query for logging
         current_message = state["messages"][-1] if state["messages"] else None
         if current_message and isinstance(current_message, HumanMessage):
-            # Update session logs
             session_logs = state.get("session_logs", [])
             phone_mentions = state.get("phone_mentions", [])
-
             query_text = current_message.content
             session_logs.append(query_text)
-
-            # Extract phone mentions
             new_mentions = self.logger.extract_phone_mentions(query_text)
             phone_mentions.extend(new_mentions)
-
-            # Update state
             state["session_logs"] = session_logs
             state["phone_mentions"] = phone_mentions
 
+        # Ensure the full conversation history (user + assistant messages) is sent every time
         messages = [system_prompt] + state["messages"]
+
         response = self.model.bind_tools(self.tools).invoke(messages)
 
+        # Return response wrapped in a list, preserving other state fields
         return {
             "messages": [response],
             "session_logs": state.get("session_logs", []),
@@ -159,11 +142,9 @@ Respond directly to the customer in Markdown format, WITHOUT revealing internal 
         """Execute tools based on model requests"""
         if not state["messages"]:
             return {"messages": []}
-
         last = state["messages"][-1]
         if not getattr(last, "tool_calls", None):
             return {"messages": []}
-
         outputs = []
         for call in last.tool_calls:
             result = self.tools_by_name[call["name"]].invoke(call["args"])
@@ -181,10 +162,8 @@ Respond directly to the customer in Markdown format, WITHOUT revealing internal 
         """Log session analytics"""
         session_logs = state.get("session_logs", [])
         phone_mentions = state.get("phone_mentions", [])
-
         if session_logs:
             self.logger.log_session(session_logs, phone_mentions)
-
         return {}
 
     def _should_continue(self, state: AgentState):
@@ -198,29 +177,52 @@ Respond directly to the customer in Markdown format, WITHOUT revealing internal 
     def chat(self, message: str, thread_id: str = "default") -> str:
         """
         Send a message to the agent and get response
-
         Args:
             message: User message
             thread_id: Conversation thread identifier
-
         Returns:
             Agent response
         """
-        config = {"configurable": {"thread_id": thread_id}}
-
-        initial_state = {
-            "messages": [HumanMessage(content=message)],
+        # Load conversation state or create new one
+        state = self.state_per_thread.get(thread_id, {
+            "messages": [],
             "session_logs": [],
             "phone_mentions": []
-        }
+        })
 
-        result = self.graph.invoke(initial_state, config)
+        # Append new user message
+        state["messages"].append(HumanMessage(content=message))
 
-        # Extract response
-        if result and "messages" in result:
-            last_message = result["messages"][-1]
-            if hasattr(last_message, "content") and last_message.content:
-                return last_message.content
+        # Debug: print message counts
+        print(f"[{thread_id}] Before invoke, messages count: {len(state['messages'])}")
+        for m in state["messages"]:
+            prefix = "User" if isinstance(m, HumanMessage) else "Agent"
+            print(f" - {prefix}: {m.content[:80]}")
+
+        config = {"configurable": {"thread_id": thread_id}}
+
+        # Invoke graph with current state
+        result = self.graph.invoke(state, config)
+
+        # Append all *non-user* messages returned (usually model replies)
+        for msg in result.get("messages", []):
+            if not isinstance(msg, HumanMessage):
+                state["messages"].append(msg)
+
+        # Update session logs and phone mentions
+        state["session_logs"] = result.get("session_logs", state.get("session_logs", []))
+        state["phone_mentions"] = result.get("phone_mentions", state.get("phone_mentions", []))
+
+        # Save updated conversation state back
+        self.state_per_thread[thread_id] = state
+
+        # Debug: print updated message count
+        print(f"[{thread_id}] After invoke, messages count: {len(state['messages'])}")
+
+        # Return last assistant message content if available
+        for msg in reversed(result.get("messages", [])):
+            if not isinstance(msg, HumanMessage) and hasattr(msg, "content") and msg.content:
+                return msg.content
 
         return "Извините, произошла ошибка при обработке запроса."
 
