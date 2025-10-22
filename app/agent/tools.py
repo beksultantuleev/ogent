@@ -2,6 +2,11 @@
 Retriever tools for the ReAct agent
 """
 
+import os
+
+os.environ["HTTP_PROXY"] = "http://172.27.129.0:3128"
+os.environ["HTTPS_PROXY"] = "http://172.27.129.0:3128"
+
 from langchain.tools import Tool
 from langchain_core.vectorstores import VectorStoreRetriever
 

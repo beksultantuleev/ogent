@@ -3,6 +3,11 @@
 Upload mobile phone specifications from CSV to Qdrant
 """
 
+import os
+
+os.environ["HTTP_PROXY"] = "http://172.27.129.0:3128"
+os.environ["HTTPS_PROXY"] = "http://172.27.129.0:3128"
+
 import sys
 import csv
 import json
@@ -152,7 +157,8 @@ JSON: {json.dumps(phone_info, ensure_ascii=False)}
             vector_manager.embeddings,
             host=settings.qdrant_host,
             port=settings.qdrant_port,
-            collection_name=settings.specs_collection
+            collection_name=settings.specs_collection,
+        
         )
 
         print("✅ Mobile specifications uploaded successfully!")

@@ -8,6 +8,10 @@ from typing import Optional
 
 from dotenv import load_dotenv
 
+import os
+
+os.environ["HTTP_PROXY"] = "http://172.27.129.0:3128"
+os.environ["HTTPS_PROXY"] = "http://172.27.129.0:3128"
 
 class Settings:
     """Application settings"""

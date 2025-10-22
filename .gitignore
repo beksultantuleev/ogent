@@ -11,6 +11,8 @@ ENV/
 env.bak/
 venv.bak/
 .env
+win_virt_env/
+win_virt_env311/
 
 # IDE
 .vscode/

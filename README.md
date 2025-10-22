@@ -59,7 +59,7 @@ pip install -r requirements.txt
 Create `.env` file:
 ```env
 OPENAI_API_KEY=your_openai_api_key_here
-OPENAI_MODEL=gpt-4o-mini
+OPENAI_MODEL=gpt-4.1-mini
 EMBEDDING_MODEL=text-embedding-3-small
 ```
 

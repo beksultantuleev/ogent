@@ -1,7 +1,10 @@
 """
 Vector store management for O!Store Agent
 """
+import os
 
+os.environ["HTTP_PROXY"] = "http://172.27.129.0:3128"
+os.environ["HTTPS_PROXY"] = "http://172.27.129.0:3128"
 from typing import Tuple
 
 from langchain_openai import OpenAIEmbeddings
