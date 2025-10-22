@@ -21,8 +21,8 @@ COPY . .
 
 # 6. Expose the port your application will run on.
 # This is documentation for Kubernetes and other tools.
-EXPOSE 8000
+EXPOSE 8008
 
 # 7. Define the command to run your application.
 # IMPORTANT: We remove '--reload' as it is for development, not production.
-CMD ["uvicorn", "api.ollama_wrapper:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["uvicorn", "api.ollama_wrapper:app", "--host", "0.0.0.0", "--port", "8008"]
