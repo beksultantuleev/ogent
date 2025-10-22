@@ -12,7 +12,7 @@ COPY requirements_version.txt .
 
 # 4. Install the dependencies.
 # --no-cache-dir keeps the final image size smaller.
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir -r requirements_version.txt
 
 # 5. Copy your application code into the container.
 # The first '.' is the source on your machine (your project folder).

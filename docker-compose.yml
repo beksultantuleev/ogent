@@ -1,20 +1,9 @@
 version: '3.8'
 
 services:
-  # Qdrant Vector Database
-  qdrant:
-    image: qdrant/qdrant:latest
-    container_name: ostore_qdrant
-    ports:
-      - "6333:6333"
-      - "6334:6334"
-    volumes:
-      - qdrant_data:/qdrant/storage
-    restart: unless-stopped
-    networks:
-      - ostore_network
-
   # O!Store Agent API (Ollama-compatible)
+  # This service now connects to an external Qdrant instance.
+  # Ensure your .env file contains the correct QDRANT_HOST (the IP address) and QDRANT_PORT.
   ostore-api:
     build:
       context: .
@@ -24,39 +13,21 @@ services:
       - .env
     ports:
       - "8000:8000"
-    depends_on:
-      - qdrant
+    # 'depends_on' is removed as Qdrant is no longer managed by this compose file.
     restart: unless-stopped
     networks:
       - ostore_network
     volumes:
       - ./logs:/app/logs
       - ./data:/app/data
+    # Variables set here in the 'environment' block will override any values
+    # set for the same variables in the .env file.
     environment:
-      - QDRANT_HOST=qdrant
+      - QDRANT_HOST=172.27.201.105
       - QDRANT_PORT=6333
 
-  # OpenWebUI (Optional - for testing)
-  openwebui:
-    image: ghcr.io/open-webui/open-webui:main
-    container_name: ostore_openwebui
-    ports:
-      - "3000:8080"
-    environment:
-      - OLLAMA_BASE_URL=http://host.docker.internal:8000
-      - WEBUI_SECRET_KEY=your_secret_key_here
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
-    networks:
-      - ostore_network
-    volumes:
-      - openwebui_data:/app/backend/data
-    restart: unless-stopped
-
-volumes:
-  qdrant_data:
-  openwebui_data:
-
+# The 'qdrant' service and its associated volume 'qdrant_data' have been removed.
 networks:
   ostore_network:
     driver: bridge
+
